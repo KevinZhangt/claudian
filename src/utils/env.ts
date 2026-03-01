@@ -164,7 +164,8 @@ function getShellPath(): string | null {
   if (isWindows) return null;
   try {
     const home = getHomeDir();
-    const result = execSync('zsh -l -c "echo $PATH"', {
+    // 单引号防止外层 /bin/sh 提前展开 $PATH，让 zsh 登录 shell 自己展开
+    const result = execSync("zsh -l -c 'echo $PATH'", {
       encoding: 'utf8',
       timeout: 2000,
       env: {
