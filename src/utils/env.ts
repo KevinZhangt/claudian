@@ -5,6 +5,7 @@
  * and system identification utilities.
  */
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -158,6 +159,27 @@ function getExtraBinaryPaths(): string[] {
   }
 }
 
+/** Unix: 从登录 shell 读取 PATH（会加载 ~/.zshenv / ~/.zprofile），GUI 进程本身没有该环境。 */
+function getShellPath(): string | null {
+  if (isWindows) return null;
+  try {
+    const home = getHomeDir();
+    const result = execSync('zsh -l -c "echo $PATH"', {
+      encoding: 'utf8',
+      timeout: 2000,
+      env: {
+        HOME: home || '/',
+        USER: process.env.USER || process.env.LOGNAME || '',
+        LOGNAME: process.env.LOGNAME || process.env.USER || '',
+      },
+    });
+    const trimmed = result?.trim();
+    return trimmed || null;
+  } catch {
+    return null;
+  }
+}
+
 export function findNodeDirectory(additionalPaths?: string): string | null {
   const searchPaths = getExtraBinaryPaths();
 
@@ -292,6 +314,11 @@ export function getEnhancedPath(additionalPaths?: string, cliPath?: string): str
   }
 
   segments.push(...extraPaths);
+
+  const shellPath = getShellPath();
+  if (shellPath) {
+    segments.push(...parsePathEntries(shellPath));
+  }
 
   if (currentPath) {
     segments.push(...parsePathEntries(currentPath));
