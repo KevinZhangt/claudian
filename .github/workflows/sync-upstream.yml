@@ -62,60 +62,85 @@ jobs:
 
       - name: Merge upstream changes
         if: steps.check_updates.outputs.has_updates == 'true'
+        id: merge
         run: |
           UPSTREAM_TAG="${{ steps.check_updates.outputs.upstream_tag }}"
 
-          # 尝试合并上游 main 分支
           if git merge upstream/main --no-edit --allow-unrelated-histories; then
-            echo "✅ Successfully merged upstream/main"
+            echo "merged=true" >> $GITHUB_OUTPUT
+            echo "✅ 合并成功: upstream/main"
           else
-            echo "⚠️ Merge conflict detected, trying to resolve..."
-
-            # 如果有冲突，优先使用上游的关键文件
-            git checkout --theirs package.json manifest.json || true
-            git checkout --theirs src/ || true
-
-            # 保留我们的 workflow 文件
-            git checkout --ours .github/workflows/sync-upstream.yml || true
-
-            # 添加已解决的文件
-            git add .
-
-            # 完成合并
-            git commit -m "chore: merge upstream $UPSTREAM_TAG (auto-resolved conflicts)" || true
+            # 合并失败：取消并让后续 step 创建 Issue 通知，不强行解决
+            git merge --abort
+            echo "merged=false" >> $GITHUB_OUTPUT
+            echo "::error::合并冲突，需手动解决后重跑 workflow"
           fi
 
-      - name: Apply shell-env-fix patch
-        if: steps.check_updates.outputs.has_updates == 'true'
+      - name: 冲突时创建 Issue 并终止
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ 合并冲突：upstream ${{ steps.check_updates.outputs.upstream_tag }}`,
+              body: [
+                '自动同步上游时发生合并冲突，需要手动解决。',
+                '',
+                '**操作步骤：**',
+                '```bash',
+                'git fetch upstream',
+                'git checkout feature/shell_default_env',
+                'git merge upstream/main',
+                '# 解决冲突后：',
+                'git add . && git commit',
+                'git push origin feature/shell_default_env',
+                '```',
+                '',
+                `Workflow 运行记录：https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              ].join('\n'),
+              labels: ['sync', 'conflict'],
+            });
+            core.setFailed('合并冲突，已创建 Issue，终止构建');
+
+      - name: 合并后恢复自定义 patch
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         run: |
-          # 检查我们的 shell-env-fix 补丁是否还存在
+          # upstream 合并后会重置 manifest.json name，强制恢复
+          sed -i 's/"name": "Claudian"/"name": "Claudian Enhance"/' manifest.json
+
+          # 验证 getShellPath patch 是否还存在（upstream 不会改 env.ts，正常不会丢）
           if ! grep -q "getShellPath" src/utils/env.ts; then
-            echo "⚠️ Shell-env-fix 补丁丢失，需要重新应用"
-            # 这里可以从某个备份分支或 commit 恢复补丁
-            # 或者触发一个警告，需要手动处理
-            echo "::warning::Shell-env-fix patch may need to be reapplied"
-          else
-            echo "✅ Shell-env-fix 补丁仍然存在"
+            echo "::error::getShellPath patch 丢失，请检查 src/utils/env.ts"
+            exit 1
           fi
+
+          # 提交恢复的自定义内容（如果有变更）
+          git diff --quiet && echo "无需恢复" || (
+            git add manifest.json
+            git commit -m "chore: restore custom patches after upstream merge"
+          )
+          echo "✅ 自定义 patch 完整"
 
       - name: Setup Node 20
-        if: steps.check_updates.outputs.has_updates == 'true'
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
       - name: Install dependencies
-        if: steps.check_updates.outputs.has_updates == 'true'
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         run: npm ci
 
       - name: Run tests
-        if: steps.check_updates.outputs.has_updates == 'true'
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         run: npm run test -- --selectProjects unit
         continue-on-error: true  # 测试失败不阻止发布，但会记录
 
       - name: Build
-        if: steps.check_updates.outputs.has_updates == 'true'
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         run: npm run build
 
       - name: Create new version tag
@@ -140,13 +165,13 @@ jobs:
           echo "Created new tag: $NEW_TAG"
 
       - name: Push changes
-        if: steps.check_updates.outputs.has_updates == 'true'
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         run: |
           git push origin feature/shell_default_env
           git push origin ${{ steps.create_tag.outputs.new_tag }}
 
       - name: Get changelog
-        if: steps.check_updates.outputs.has_updates == 'true'
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         id: changelog
         run: |
           LOCAL_TAG="${{ steps.check_updates.outputs.local_tag }}"
@@ -167,7 +192,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        if: steps.check_updates.outputs.has_updates == 'true'
+        if: steps.check_updates.outputs.has_updates == 'true' && steps.merge.outputs.merged == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.create_tag.outputs.new_tag }}
