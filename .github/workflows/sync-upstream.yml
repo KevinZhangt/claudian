@@ -1,0 +1,98 @@
+name: Sync Upstream & Build
+
+on:
+  schedule:
+    # 每 6 小时检查一次上游更新
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '强制同步（忽略版本比对）'
+        required: false
+        default: 'false'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout 自己的分支
+        uses: actions/checkout@v4
+        with:
+          ref: feature/shell_default_env
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 配置 git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: 添加上游并拉取
+        run: |
+          git remote add upstream https://github.com/YishenTu/claudian.git
+          git fetch upstream --tags
+
+      - name: 获取上游最新 tag
+        id: upstream_tag
+        run: |
+          # 取上游最新的语义化 tag（排除含 _fix 的）
+          UPSTREAM_TAG=$(git tag --sort=-version:refname \
+            | grep -v '_fix' \
+            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+            | head -1)
+          echo "tag=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
+          echo "上游最新 tag: $UPSTREAM_TAG"
+
+      - name: 检查是否已有对应的 _fix tag
+        id: check_tag
+        run: |
+          UPSTREAM_TAG="${{ steps.upstream_tag.outputs.tag }}"
+          FIX_TAG="${UPSTREAM_TAG}_fix"
+          if git tag | grep -qx "$FIX_TAG" && [ "${{ inputs.force }}" != "true" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "✅ $FIX_TAG 已存在，跳过"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "🔄 需要同步: $UPSTREAM_TAG → $FIX_TAG"
+          fi
+
+      - name: 合并上游 main 到本分支
+        if: steps.check_tag.outputs.skip == 'false'
+        run: |
+          git merge upstream/main --no-edit --allow-unrelated-histories \
+            -m "chore: sync upstream ${{ steps.upstream_tag.outputs.tag }}"
+
+      - name: Setup Node
+        if: steps.check_tag.outputs.skip == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: 安装依赖
+        if: steps.check_tag.outputs.skip == 'false'
+        run: npm ci
+
+      - name: 构建
+        if: steps.check_tag.outputs.skip == 'false'
+        run: npm run build
+
+      - name: 运行测试
+        if: steps.check_tag.outputs.skip == 'false'
+        run: npm run test
+
+      - name: 推送合并结果到分支
+        if: steps.check_tag.outputs.skip == 'false'
+        run: |
+          git push origin feature/shell_default_env
+
+      - name: 打 _fix tag 并推送（触发 release.yml）
+        if: steps.check_tag.outputs.skip == 'false'
+        run: |
+          FIX_TAG="${{ steps.upstream_tag.outputs.tag }}_fix"
+          git tag "$FIX_TAG"
+          git push origin "$FIX_TAG"
+          echo "🏷️  已推送 tag: $FIX_TAG"
