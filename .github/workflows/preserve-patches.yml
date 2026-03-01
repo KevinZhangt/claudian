@@ -1,0 +1,55 @@
+name: Preserve Custom Patches
+
+# 这个 workflow 在同步上游之前备份我们的自定义补丁
+# 在同步之后自动重新应用
+
+on:
+  workflow_call:
+    outputs:
+      patches_preserved:
+        description: "Whether patches were successfully preserved"
+        value: ${{ jobs.preserve.outputs.success }}
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    outputs:
+      success: ${{ steps.check.outputs.success }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create patch files
+        id: create_patches
+        run: |
+          mkdir -p .github/patches
+
+          # 找出我们添加的 shell-env-fix 相关的 commits
+          # 从最后一个非 fix 版本开始
+          LAST_UPSTREAM_TAG=$(git tag -l | grep -v "fix" | grep -v "shell-env" | sort -V | tail -1)
+
+          if [ -n "$LAST_UPSTREAM_TAG" ]; then
+            # 创建补丁文件
+            git format-patch ${LAST_UPSTREAM_TAG}..HEAD --stdout > .github/patches/custom-fixes.patch
+
+            if [ -s .github/patches/custom-fixes.patch ]; then
+              echo "✅ Created patch file"
+              cat .github/patches/custom-fixes.patch
+            else
+              echo "ℹ️ No custom patches to preserve"
+            fi
+          fi
+
+      - name: Upload patches
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-patches
+          path: .github/patches/
+          retention-days: 90
+
+      - name: Check success
+        id: check
+        run: echo "success=true" >> $GITHUB_OUTPUT
