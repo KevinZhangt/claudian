@@ -15,6 +15,7 @@ import type {
   Options,
 } from '@anthropic-ai/claude-agent-sdk';
 
+import { loadShellEnvironment } from '../../utils/env';
 import type { McpServerManager } from '../mcp';
 import type { PluginManager } from '../plugins';
 import { buildSystemPrompt, type SystemPromptSettings } from '../prompts/mainAgent';
@@ -191,6 +192,9 @@ export class QueryOptionsBuilder {
       userName: ctx.settings.userName,
     });
 
+    // Load shell environment to inherit user's PATH, pyenv, nvm, etc.
+    const shellEnv = loadShellEnvironment();
+
     const options: Options = {
       cwd: ctx.vaultPath,
       systemPrompt,
@@ -202,6 +206,7 @@ export class QueryOptionsBuilder {
         : ['project'],
       env: {
         ...process.env,
+        ...shellEnv,
         ...ctx.customEnv,
         PATH: ctx.enhancedPath,
       },
@@ -259,6 +264,9 @@ export class QueryOptionsBuilder {
       userName: ctx.settings.userName,
     });
 
+    // Load shell environment to inherit user's PATH, pyenv, nvm, etc.
+    const shellEnv = loadShellEnvironment();
+
     const options: Options = {
       cwd: ctx.vaultPath,
       systemPrompt,
@@ -271,6 +279,7 @@ export class QueryOptionsBuilder {
         : ['project'],
       env: {
         ...process.env,
+        ...shellEnv,
         ...ctx.customEnv,
         PATH: ctx.enhancedPath,
       },

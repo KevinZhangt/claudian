@@ -5,6 +5,7 @@
  * and system identification utilities.
  */
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -456,4 +457,77 @@ export function formatContextLimit(tokens: number): string {
     return `${tokens / 1000}k`;
   }
   return tokens.toLocaleString();
+}
+
+/**
+ * Loads environment variables from the user's shell configuration files.
+ *
+ * This ensures commands spawned by Claude have access to the same environment
+ * as the user's interactive shell (e.g., PATH, pyenv, nvm, homebrew, etc.).
+ *
+ * For zsh: sources ~/.zshenv
+ * For bash: sources ~/.bashrc and ~/.bash_profile
+ *
+ * @returns Environment variables from shell config, or empty object on error
+ */
+export function loadShellEnvironment(): Record<string, string> {
+  try {
+    const shell = process.env.SHELL || '';
+    const home = getHomeDir();
+
+    if (!home) {
+      return {};
+    }
+
+    let command: string;
+
+    if (shell.includes('zsh')) {
+      // For zsh: source .zshenv (always loaded) and print all env vars
+      // Use -l to make it a login shell, which sources .zprofile
+      const zshenvPath = path.join(home, '.zshenv');
+      if (fs.existsSync(zshenvPath)) {
+        command = `${shell} -l -c 'env'`;
+      } else {
+        return {};
+      }
+    } else if (shell.includes('bash')) {
+      // For bash: source .bashrc and .bash_profile
+      // Use -l to make it a login shell, which sources .bash_profile
+      const bashrcPath = path.join(home, '.bashrc');
+      const bashProfilePath = path.join(home, '.bash_profile');
+
+      if (fs.existsSync(bashrcPath) || fs.existsSync(bashProfilePath)) {
+        command = `${shell} -l -c 'env'`;
+      } else {
+        return {};
+      }
+    } else {
+      // Unsupported shell or no shell configured
+      return {};
+    }
+
+    // Execute the command with a timeout to avoid hanging
+    const output = execSync(command, {
+      encoding: 'utf8',
+      timeout: 5000, // 5 second timeout
+      stdio: ['pipe', 'pipe', 'ignore'], // Ignore stderr to avoid noise
+    });
+
+    // Parse the output
+    const env: Record<string, string> = {};
+    for (const line of output.split('\n')) {
+      const eqIndex = line.indexOf('=');
+      if (eqIndex > 0) {
+        const key = line.substring(0, eqIndex);
+        const value = line.substring(eqIndex + 1);
+        env[key] = value;
+      }
+    }
+
+    return env;
+  } catch {
+    // Silently fail if shell config loading fails
+    // This is non-critical - we'll fall back to process.env
+    return {};
+  }
 }

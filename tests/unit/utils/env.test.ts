@@ -1,3 +1,4 @@
+import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -15,6 +16,7 @@ const {
   getMissingNodeError,
   getModelsFromEnvironment,
   getHostnameKey,
+  loadShellEnvironment,
   parseContextLimit,
   parseEnvironmentVariables,
 } = env;
@@ -1197,5 +1199,113 @@ describe('getExtraBinaryPaths (Windows branches)', () => {
     const mod = loadWithWindowsPlatform();
     const result = mod.getEnhancedPath();
     expect(result).toContain(';');
+  });
+});
+
+describe('loadShellEnvironment', () => {
+  const originalShell = process.env.SHELL;
+  const originalHome = process.env.HOME;
+  let execSyncMock: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    execSyncMock = jest.spyOn(childProcess, 'execSync');
+  });
+
+  afterEach(() => {
+    if (originalShell !== undefined) {
+      process.env.SHELL = originalShell;
+    } else {
+      delete process.env.SHELL;
+    }
+    if (originalHome !== undefined) {
+      process.env.HOME = originalHome;
+    } else {
+      delete process.env.HOME;
+    }
+    execSyncMock.mockRestore();
+  });
+
+  it('returns empty object when HOME is not set', () => {
+    delete process.env.HOME;
+    const result = loadShellEnvironment();
+    expect(result).toEqual({});
+  });
+
+  it('returns empty object when SHELL is not set', () => {
+    delete process.env.SHELL;
+    const result = loadShellEnvironment();
+    expect(result).toEqual({});
+  });
+
+  it('returns empty object for unsupported shell', () => {
+    process.env.SHELL = '/bin/fish';
+    const result = loadShellEnvironment();
+    expect(result).toEqual({});
+  });
+
+  it('returns empty object when zsh config does not exist', () => {
+    process.env.SHELL = '/bin/zsh';
+    process.env.HOME = '/mock/home';
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const result = loadShellEnvironment();
+    expect(result).toEqual({});
+  });
+
+  it('returns empty object when bash config does not exist', () => {
+    process.env.SHELL = '/bin/bash';
+    process.env.HOME = '/mock/home';
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const result = loadShellEnvironment();
+    expect(result).toEqual({});
+  });
+
+  it('returns empty object on execution error', () => {
+    process.env.SHELL = '/bin/zsh';
+    process.env.HOME = '/mock/home';
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    execSyncMock.mockImplementation(() => {
+      throw new Error('Command failed');
+    });
+
+    const result = loadShellEnvironment();
+    expect(result).toEqual({});
+  });
+
+  it('parses environment variables from zsh shell output', () => {
+    process.env.SHELL = '/bin/zsh';
+    process.env.HOME = '/mock/home';
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    execSyncMock.mockReturnValue('FOO=bar\nBAZ=qux\nPATH=/usr/bin:/usr/local/bin\n');
+
+    const result = loadShellEnvironment();
+    expect(result).toEqual({
+      FOO: 'bar',
+      BAZ: 'qux',
+      PATH: '/usr/bin:/usr/local/bin',
+    });
+  });
+
+  it('parses environment variables from bash shell output', () => {
+    process.env.SHELL = '/bin/bash';
+    process.env.HOME = '/mock/home';
+
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+    execSyncMock.mockReturnValue('USER=test\nHOME=/home/test\n');
+
+    const result = loadShellEnvironment();
+    expect(result).toEqual({
+      USER: 'test',
+      HOME: '/home/test',
+    });
   });
 });
