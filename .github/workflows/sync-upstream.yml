@@ -18,6 +18,7 @@ jobs:
       - name: Checkout fork
         uses: actions/checkout@v4
         with:
+          ref: feature/shell_default_env
           fetch-depth: 0  # 获取完整历史
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -34,10 +35,13 @@ jobs:
       - name: Check for upstream updates
         id: check_updates
         run: |
-          # 获取上游最新的 tag
-          UPSTREAM_TAG=$(git describe --tags $(git rev-list --tags --max-count=1 upstream/main) 2>/dev/null || echo "")
-          # 获取本地最新的非 shell-env-fix tag
-          LOCAL_TAG=$(git tag -l | grep -v "shell-env-fix" | sort -V | tail -1 || echo "")
+          # 只取上游的 tag（排除含 _fix 的本地 tag）
+          UPSTREAM_TAG=$(git tag --sort=-version:refname \
+            | grep -v "_fix" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | head -1 || echo "")
+          # 获取本地最新的非 _fix tag（对应上游已同步过的版本）
+          LOCAL_TAG=$(git tag -l | grep -v "_fix" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || echo "")
 
           echo "upstream_tag=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
           echo "local_tag=$LOCAL_TAG" >> $GITHUB_OUTPUT
@@ -85,7 +89,7 @@ jobs:
         if: steps.check_updates.outputs.has_updates == 'true'
         run: |
           # 检查我们的 shell-env-fix 补丁是否还存在
-          if ! grep -q "loadShellEnvironment" src/utils/env.ts; then
+          if ! grep -q "getShellPath" src/utils/env.ts; then
             echo "⚠️ Shell-env-fix 补丁丢失，需要重新应用"
             # 这里可以从某个备份分支或 commit 恢复补丁
             # 或者触发一个警告，需要手动处理
@@ -124,10 +128,10 @@ jobs:
 
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-          # 更新 package.json 和 manifest.json 版本号
-          npm version $NEW_TAG --no-git-tag-version || true
+          # _fix 后缀不是合法 semver，直接更新 manifest.json 版本字段
+          sed -i "s/\"version\": \".*\"/\"version\": \"${UPSTREAM_TAG}\"/" manifest.json
 
-          git add package.json package-lock.json manifest.json
+          git add manifest.json
           git commit -m "chore: bump version to $NEW_TAG (synced from upstream $UPSTREAM_TAG)" || true
 
           # 创建 tag
@@ -138,7 +142,7 @@ jobs:
       - name: Push changes
         if: steps.check_updates.outputs.has_updates == 'true'
         run: |
-          git push origin main
+          git push origin feature/shell_default_env
           git push origin ${{ steps.create_tag.outputs.new_tag }}
 
       - name: Get changelog
