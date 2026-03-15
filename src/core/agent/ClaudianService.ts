@@ -62,8 +62,7 @@ import type {
   SlashCommand,
   StreamChunk,
 } from '../types';
-import { resolveModelWithBetas, THINKING_BUDGETS } from '../types';
-import type { SDKNonResultMessage } from '../types/sdk';
+import { THINKING_BUDGETS } from '../types';
 import { MessageChannel } from './MessageChannel';
 import {
   type ColdStartQueryContext,
@@ -614,7 +613,6 @@ export class ClaudianService {
   private getTransformOptions(modelOverride?: string) {
     return {
       intendedModel: modelOverride ?? this.plugin.settings.model,
-      is1MEnabled: this.plugin.settings.show1MModel ?? false,
       customContextLimits: this.plugin.settings.customContextLimits,
     };
   }
@@ -682,8 +680,8 @@ export class ClaudianService {
       }
     }
 
-    if (message.type === 'assistant' && (message as SDKNonResultMessage).uuid && handler) {
-      handler.onChunk({ type: 'sdk_assistant_uuid', uuid: (message as SDKNonResultMessage).uuid! });
+    if (message.type === 'assistant' && message.uuid && handler) {
+      handler.onChunk({ type: 'sdk_assistant_uuid', uuid: message.uuid });
     }
 
     // Check for turn completion
@@ -1113,12 +1111,10 @@ export class ClaudianService {
     const budgetConfig = THINKING_BUDGETS.find(b => b.value === budgetSetting);
     const thinkingTokens = budgetConfig?.tokens ?? null;
 
-    // Model can always be updated dynamically (show1MModel change triggers restart)
-    const show1MModel = this.plugin.settings.show1MModel;
+    // Model can always be updated dynamically
     if (this.currentConfig && selectedModel !== this.currentConfig.model) {
-      const resolved = resolveModelWithBetas(selectedModel, show1MModel);
       try {
-        await this.persistentQuery.setModel(resolved.model);
+        await this.persistentQuery.setModel(selectedModel);
         this.currentConfig.model = selectedModel;
       } catch {
         new Notice('Failed to update model');

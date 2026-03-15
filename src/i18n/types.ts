@@ -141,7 +141,8 @@ export type TranslationKey =
   | 'settings.subagents.refreshFailed'
   | 'settings.subagents.deleteFailed'
   | 'settings.subagents.renameCleanupFailed'
-  | 'settings.subagents.saved'
+  | 'settings.subagents.created'
+  | 'settings.subagents.updated'
   | 'settings.subagents.deleted'
   | 'settings.subagents.duplicateName'
   | 'settings.subagents.descriptionRequired'
@@ -207,8 +208,6 @@ export type TranslationKey =
 
   // Settings - Advanced
   | 'settings.advanced'
-  | 'settings.show1MModel.name'
-  | 'settings.show1MModel.desc'
   | 'settings.enableChrome.name'
   | 'settings.enableChrome.desc'
   | 'settings.enableBangBash.name'

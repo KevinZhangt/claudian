@@ -104,7 +104,7 @@ Use it like Claude Code—read, write, edit, search files in your vault.
   - `@mcp-server` enables context-saving MCP servers
   - `@folder/` filters to files from that external context (e.g., `@workspace/`)
   - Vault files shown by default
-- **Selection**: Select text in editor, then chat—selection included automatically
+- **Selection**: Select text in editor, or elements in canvas, then chat—selection included automatically
 - **Images**: Drag-drop, paste, or type path; configure media folder for `![[image]]` embeds
 - **External contexts**: Click folder icon in toolbar for access to directories outside vault
 
@@ -253,7 +253,8 @@ src/
 - [x] Plan mode
 - [x] `rewind` and `fork` support (including `/fork` command)
 - [x] `!command` support
-- [ ] Tool renderers refinement
+- [x] Tool renderers refinement
+- [ ] Codex SDK integration
 - [ ] Hooks and other advanced features
 - [ ] More to come!
 
@@ -263,7 +264,13 @@ Licensed under the [MIT License](LICENSE).
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=YishenTu/claudian&type=date&legend=top-left)](https://www.star-history.com/#YishenTu/claudian&type=date&legend=top-left)
+<a href="https://www.star-history.com/?repos=YishenTu%2Fclaudian&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=YishenTu/claudian&type=date&legend=top-left&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=YishenTu/claudian&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=YishenTu/claudian&type=date&legend=top-left" />
+  </picture>
+</a>
 
 ## Acknowledgments
 

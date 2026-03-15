@@ -158,7 +158,8 @@
       "refreshFailed": "Failed to refresh subagents: {message}",
       "deleteFailed": "Failed to delete subagent: {message}",
       "renameCleanupFailed": "Warning: could not remove old file for \"{name}\"",
-      "saved": "Subagent \"{name}\" {action}",
+      "created": "Subagent \"{name}\" created",
+      "updated": "Subagent \"{name}\" updated",
       "deleted": "Subagent \"{name}\" deleted",
       "duplicateName": "An agent named \"{name}\" already exists",
       "descriptionRequired": "Description is required",
@@ -235,10 +236,6 @@
       "invalid": "Invalid format. Use: 256k, 1m, or exact count (1000-10000000)."
     },
     "advanced": "Advanced",
-    "show1MModel": {
-      "name": "Enable Sonnet with 1M context window",
-      "desc": "Replace standard Sonnet with Sonnet (1M) in the model selector. Same pricing under 200k tokens. Requires Max subscription."
-    },
     "enableChrome": {
       "name": "Enable Chrome extension",
       "desc": "Allow Claude to interact with Chrome via the claude-in-chrome extension. Requires the extension to be installed. Requires session restart."
